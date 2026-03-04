@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>桌遊店管理助手 - 熟客加強版</title>
+    <title>桌遊店管理助手 - 熟客邏輯優化版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
@@ -51,7 +51,7 @@
             
             <!-- 熟客快速選擇區 -->
             <div class="mb-3">
-                <p class="text-[10px] text-gray-400 mb-1">常客快選 (依頻率排序):</p>
+                <p class="text-[10px] text-gray-400 mb-1">熟客快選 (付費次數排序):</p>
                 <div id="frequentGuests" class="flex flex-wrap gap-2">
                     <!-- 自動生成熟客按鈕 -->
                 </div>
@@ -96,9 +96,9 @@
 
     <script>
         // --- 資料初始化 ---
-        let dailyData = {}; // 格式: { '2023-10-27': { general: [], cardPlayers: [], extraNotes: '', extraIncome: 0 } }
-        let rentals = [];   // 全域租借紀錄
-        let guestStats = {}; // 熟客點擊統計: { '名字': 次數 }
+        let dailyData = {}; 
+        let rentals = [];   
+        let guestStats = {}; // 熟客紀錄: { '名字': { totalCount: 次數, lastDate: '2023-10-27' } }
 
         const datePicker = document.getElementById('datePicker');
         datePicker.value = new Date().toISOString().split('T')[0];
@@ -115,7 +115,6 @@
             const date = datePicker.value;
             if (!dailyData[date]) dailyData[date] = { general: [], cardPlayers: [], extraNotes: '', extraIncome: 0 };
             
-            // 抓取畫面上備註與金額的即時數值
             dailyData[date].extraNotes = document.getElementById('extraNotes').value;
             dailyData[date].extraIncome = parseFloat(document.getElementById('extraIncome').value) || 0;
             
@@ -175,7 +174,7 @@
             saveDailyData();
         };
 
-        // 打牌客人 (含熟客邏輯)
+        // 打牌客人
         window.addCardPlayerPrompt = () => {
             const name = prompt("輸入客人姓名:");
             if (name) addCardPlayer(name.trim());
@@ -185,16 +184,32 @@
             const date = datePicker.value;
             if (!dailyData[date]) dailyData[date] = { general: [], cardPlayers: [], extraNotes: '', extraIncome: 0 };
             
-            // 更新熟客統計
-            guestStats[name] = (guestStats[name] || 0) + 1;
-            
             dailyData[date].cardPlayers.push({ id: Date.now() + Math.random(), name, paid: false });
             saveDailyData();
         };
 
         window.togglePaid = (id) => {
             const date = datePicker.value;
-            dailyData[date].cardPlayers = dailyData[date].cardPlayers.map(p => p.id === id ? { ...p, paid: !p.paid } : p);
+            dailyData[date].cardPlayers = dailyData[date].cardPlayers.map(p => {
+                if (p.id === id) {
+                    const newPaidStatus = !p.paid;
+                    
+                    // 熟客紀錄邏輯：只有勾選「已付費」才紀錄，且單日限一次
+                    if (newPaidStatus) {
+                        const guest = guestStats[p.name] || { totalCount: 0, lastDate: '' };
+                        if (guest.lastDate !== date) {
+                            guest.totalCount += 1;
+                            guest.lastDate = date;
+                            guestStats[p.name] = guest;
+                        }
+                    } else {
+                        // 如果取消勾選，且該紀錄是今天產生的，則扣回 (視需求，這裡採取保守不扣回以免複雜)
+                    }
+                    
+                    return { ...p, paid: newPaidStatus };
+                }
+                return p;
+            });
             saveDailyData();
         };
 
@@ -224,7 +239,7 @@
         };
 
         window.clearHistory = () => {
-            if(confirm("這將清除手機內所有日期的歷史紀錄，確定嗎？")) {
+            if(confirm("這將清除手機內所有歷史紀錄與熟客資料，確定嗎？")) {
                 localStorage.clear();
                 location.reload();
             }
@@ -238,16 +253,16 @@
             document.getElementById('extraNotes').value = data.extraNotes || '';
             document.getElementById('extraIncome').value = data.extraIncome || 0;
 
-            // 1. 熟客按鈕渲染 (依次數排序)
+            // 1. 熟客按鈕渲染 (依付費次數排序，不顯示數字)
             const sortedGuests = Object.entries(guestStats)
-                .sort((a, b) => b[1] - a[1]) // 由大到小
-                .slice(0, 10); // 只取前10名，避免畫面太亂
+                .sort((a, b) => b[1].totalCount - a[1].totalCount)
+                .slice(0, 12); 
 
-            document.getElementById('frequentGuests').innerHTML = sortedGuests.map(([name, count]) => `
+            document.getElementById('frequentGuests').innerHTML = sortedGuests.map(([name, info]) => `
                 <button onclick="addCardPlayer('${name}')" class="guest-btn bg-white border border-purple-200 text-purple-700 px-3 py-1 rounded-lg text-xs font-medium shadow-sm hover:bg-purple-50">
-                    ${name} <span class="text-[9px] text-purple-300 ml-1">${count}</span>
+                    ${name}
                 </button>
-            `).join('') || '<span class="text-[10px] text-gray-300">輸入新客人後會自動記錄在此</span>';
+            `).join('') || '<span class="text-[10px] text-gray-300">勾選「已付費」後，客人將出現在此</span>';
 
             // 2. 一般區
             document.getElementById('generalList').innerHTML = data.general.map(g => `
