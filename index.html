@@ -3,19 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>桌遊店管理助手 - 熟客邏輯優化版</title>
+    <title>桌遊店管理助手 - 報表強化版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         body { font-family: 'Noto Sans TC', sans-serif; -webkit-tap-highlight-color: transparent; }
         .card-shadow { box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
         input[type="time"], input[type="date"] { border: none; background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
         .guest-btn { transition: all 0.2s; }
         .guest-btn:active { transform: scale(0.95); }
+        /* 彈窗樣式 */
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+        .modal.active { display: flex; }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen pb-36">
+<body class="bg-gray-100 min-h-screen pb-40">
 
     <header class="bg-slate-900 text-white p-4 shadow-lg sticky top-0 z-50">
         <div class="flex justify-between items-center mb-2">
@@ -32,7 +34,7 @@
         <!-- 一般桌遊區 -->
         <section>
             <div class="flex justify-between items-center mb-3">
-                <h2 class="text-lg font-bold text-slate-700"><i class="fas fa-clock text-blue-600 mr-2"></i>一般桌遊區</h2>
+                <h2 class="text-lg font-bold text-slate-700"><i class="fas fa-clock text-blue-600 mr-2"></i>一般桌遊區 <span class="text-[10px] font-normal text-gray-400">($80/2hr)</span></h2>
                 <button onclick="addGeneralGuest()" class="bg-blue-600 text-white px-4 py-1.5 rounded-full text-sm font-bold shadow-sm">
                     <i class="fas fa-plus mr-1"></i>開桌
                 </button>
@@ -40,7 +42,7 @@
             <div id="generalList" class="space-y-3"></div>
         </section>
 
-        <!-- 打牌區 (含熟客功能) -->
+        <!-- 打牌區 -->
         <section class="border-t pt-4 border-gray-200">
             <div class="flex justify-between items-center mb-2">
                 <h2 class="text-lg font-bold text-slate-700"><i class="fas fa-suit-spade text-purple-600 mr-2"></i>打牌客人 ($100)</h2>
@@ -49,12 +51,9 @@
                 </button>
             </div>
             
-            <!-- 熟客快速選擇區 -->
             <div class="mb-3">
-                <p class="text-[10px] text-gray-400 mb-1">熟客快選 (付費次數排序):</p>
-                <div id="frequentGuests" class="flex flex-wrap gap-2">
-                    <!-- 自動生成熟客按鈕 -->
-                </div>
+                <p class="text-[10px] text-gray-400 mb-1">熟客快選:</p>
+                <div id="frequentGuests" class="flex flex-wrap gap-2"></div>
             </div>
 
             <div id="cardPlayerList" class="bg-white rounded-xl divide-y overflow-hidden border border-gray-200"></div>
@@ -82,24 +81,46 @@
                 </div>
             </div>
         </section>
+
+        <!-- 報表按鈕 -->
+        <div class="pt-4">
+            <button onclick="generateReport()" class="w-full py-3 bg-slate-700 text-white rounded-xl font-bold shadow-lg hover:bg-slate-800 transition-colors">
+                <i class="fas fa-file-invoice-dollar mr-2"></i>產生今日日結報表
+            </button>
+        </div>
         
         <button onclick="clearHistory()" class="w-full py-4 text-gray-300 text-xs mt-8">清除所有歷史紀錄 (慎用)</button>
     </main>
 
+    <!-- 報表彈窗 -->
+    <div id="reportModal" class="modal">
+        <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div class="bg-slate-800 text-white p-4 flex justify-between items-center">
+                <h3 class="font-bold">今日營運報表</h3>
+                <button onclick="closeReport()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-4">
+                <textarea id="reportContent" readonly class="w-full h-64 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none"></textarea>
+                <button onclick="copyReport()" class="w-full mt-4 py-3 bg-blue-600 text-white rounded-xl font-bold">複製內容</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 底部統計 -->
     <footer class="fixed bottom-0 left-0 right-0 bg-slate-900 text-white border-t p-4 grid grid-cols-4 gap-2 text-center shadow-2xl z-50">
-        <div class="border-r border-slate-700"><div id="totalGeneralCount" class="font-bold text-blue-400">0</div><div class="text-[10px] text-slate-400">人數</div></div>
-        <div class="border-r border-slate-700"><div id="totalCardCount" class="font-bold text-purple-400">0</div><div class="text-[10px] text-slate-400">打牌</div></div>
+        <div class="border-r border-slate-700"><div id="totalGeneralCount" class="font-bold text-blue-400">0</div><div class="text-[10px] text-slate-400">桌遊人</div></div>
+        <div class="border-r border-slate-700"><div id="totalCardCount" class="font-bold text-purple-400">0</div><div class="text-[10px] text-slate-400">打牌人</div></div>
         <div class="border-r border-slate-700"><div id="totalRentalIncome" class="font-bold text-orange-400">0</div><div class="text-[10px] text-slate-400">租金</div></div>
-        <div><div id="grandTotal" class="font-black text-yellow-400 text-lg">$ 0</div><div class="text-[10px] text-slate-400">總額</div></div>
+        <div><div id="grandTotal" class="font-black text-yellow-400 text-lg">$ 0</div><div class="text-[10px] text-slate-400">總入帳</div></div>
     </footer>
 
     <script>
         // --- 資料初始化 ---
         let dailyData = {}; 
         let rentals = [];   
-        let guestStats = {}; // 熟客紀錄: { '名字': { totalCount: 次數, lastDate: '2023-10-27' } }
+        let guestStats = {}; 
 
+        const GRACE_PERIOD = 15; // 寬限期 (分鐘)
         const datePicker = document.getElementById('datePicker');
         datePicker.value = new Date().toISOString().split('T')[0];
 
@@ -114,10 +135,8 @@
         function saveDailyData() {
             const date = datePicker.value;
             if (!dailyData[date]) dailyData[date] = { general: [], cardPlayers: [], extraNotes: '', extraIncome: 0 };
-            
             dailyData[date].extraNotes = document.getElementById('extraNotes').value;
             dailyData[date].extraIncome = parseFloat(document.getElementById('extraIncome').value) || 0;
-            
             localStorage.setItem('bg_dailyData', JSON.stringify(dailyData));
             localStorage.setItem('bg_rentals', JSON.stringify(rentals));
             localStorage.setItem('bg_guestStats', JSON.stringify(guestStats));
@@ -132,18 +151,30 @@
             return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
         }
 
-        function calcFee(c, s, e) {
-            if (!s || !e || c <= 0) return 0;
-            const [h1, m1] = s.split(':').map(Number);
-            const [h2, m2] = e.split(':').map(Number);
-            let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
-            if (diff <= 0) return 0;
-            const hr = diff / 60;
-            const price = hr <= 2 ? 60 : 60 + (Math.ceil(hr - 2) * 20);
-            return price * c;
+        // 修改後的計費邏輯
+        function calcFee(count, startTime, endTime) {
+            if (!startTime || !endTime || count <= 0) return 0;
+            const [h1, m1] = startTime.split(':').map(Number);
+            const [h2, m2] = endTime.split(':').map(Number);
+            let diffMinutes = (h2 * 60 + m2) - (h1 * 60 + m1);
+            
+            if (diffMinutes <= 0) return 0;
+
+            // 扣除寬限期後的計算分鐘數
+            let effectiveMinutes = diffMinutes - GRACE_PERIOD;
+            if (effectiveMinutes < 0) effectiveMinutes = 0;
+
+            // 基本 2 小時 (120分鐘)
+            if (effectiveMinutes <= 120) {
+                return 80 * count;
+            } else {
+                // 超過 2 小時，每 2 小時 40 元
+                let extraMinutes = effectiveMinutes - 120;
+                let extraUnits = Math.ceil(extraMinutes / 120);
+                return (80 + (extraUnits * 40)) * count;
+            }
         }
 
-        // 一般桌遊
         window.addGeneralGuest = () => {
             const date = datePicker.value;
             if (!dailyData[date]) dailyData[date] = { general: [], cardPlayers: [], extraNotes: '', extraIncome: 0 };
@@ -174,7 +205,6 @@
             saveDailyData();
         };
 
-        // 打牌客人
         window.addCardPlayerPrompt = () => {
             const name = prompt("輸入客人姓名:");
             if (name) addCardPlayer(name.trim());
@@ -183,7 +213,6 @@
         window.addCardPlayer = (name) => {
             const date = datePicker.value;
             if (!dailyData[date]) dailyData[date] = { general: [], cardPlayers: [], extraNotes: '', extraIncome: 0 };
-            
             dailyData[date].cardPlayers.push({ id: Date.now() + Math.random(), name, paid: false });
             saveDailyData();
         };
@@ -193,8 +222,6 @@
             dailyData[date].cardPlayers = dailyData[date].cardPlayers.map(p => {
                 if (p.id === id) {
                     const newPaidStatus = !p.paid;
-                    
-                    // 熟客紀錄邏輯：只有勾選「已付費」才紀錄，且單日限一次
                     if (newPaidStatus) {
                         const guest = guestStats[p.name] || { totalCount: 0, lastDate: '' };
                         if (guest.lastDate !== date) {
@@ -202,10 +229,7 @@
                             guest.lastDate = date;
                             guestStats[p.name] = guest;
                         }
-                    } else {
-                        // 如果取消勾選，且該紀錄是今天產生的，則扣回 (視需求，這裡採取保守不扣回以免複雜)
                     }
-                    
                     return { ...p, paid: newPaidStatus };
                 }
                 return p;
@@ -218,7 +242,6 @@
             saveDailyData();
         };
 
-        // 租借管理
         window.addRental = () => {
             const name = prompt("桌遊名稱:");
             if (!name) return;
@@ -238,8 +261,55 @@
             saveDailyData();
         };
 
+        // --- 報表功能 ---
+        window.generateReport = () => {
+            const date = datePicker.value;
+            const data = dailyData[date] || { general: [], cardPlayers: [], extraNotes: '', extraIncome: 0 };
+            
+            const gCount = data.general.reduce((s, i) => s + parseInt(i.count || 0), 0);
+            const gFee = data.general.reduce((s, i) => s + (i.fee || 0), 0);
+            
+            const cCount = data.cardPlayers.length;
+            const cPaidCount = data.cardPlayers.filter(p => p.paid).length;
+            const cFee = cPaidCount * 100;
+
+            const rFee = rentals.filter(r => r.returnDate === date).reduce((s, i) => s + (i.fee || 0), 0);
+            const extra = data.extraIncome || 0;
+            const total = gFee + cFee + rFee + extra;
+
+            let report = `【桌遊店營運日結單】\n`;
+            report += `日期：${date}\n`;
+            report += `------------------------\n`;
+            report += `● 總客人數：${gCount + cCount} 位\n`;
+            report += `   - 桌遊區：${gCount} 位\n`;
+            report += `   - 打牌區：${cCount} 位\n`;
+            report += `------------------------\n`;
+            report += `● 收入明細：\n`;
+            report += `   - 桌遊收費：$${gFee}\n`;
+            report += `   - 打牌收費：$${cFee} (${cPaidCount}人已付)\n`;
+            report += `   - 租借收入：$${rFee}\n`;
+            report += `   - 雜項收支：$${extra}\n`;
+            if(data.extraNotes) report += `     (備註: ${data.extraNotes})\n`;
+            report += `------------------------\n`;
+            report += `總入帳金額：$ ${total} 元\n`;
+            report += `------------------------\n`;
+            report += `報表產生時間：${new Date().toLocaleTimeString()}`;
+
+            document.getElementById('reportContent').value = report;
+            document.getElementById('reportModal').classList.add('active');
+        };
+
+        window.closeReport = () => document.getElementById('reportModal').classList.remove('active');
+        
+        window.copyReport = () => {
+            const text = document.getElementById('reportContent');
+            text.select();
+            document.execCommand('copy');
+            alert('報表內容已複製到剪貼簿！');
+        };
+
         window.clearHistory = () => {
-            if(confirm("這將清除手機內所有歷史紀錄與熟客資料，確定嗎？")) {
+            if(confirm("這將清除手機內所有紀錄，確定嗎？")) {
                 localStorage.clear();
                 location.reload();
             }
@@ -253,7 +323,7 @@
             document.getElementById('extraNotes').value = data.extraNotes || '';
             document.getElementById('extraIncome').value = data.extraIncome || 0;
 
-            // 1. 熟客按鈕渲染 (依付費次數排序，不顯示數字)
+            // 1. 熟客按鈕
             const sortedGuests = Object.entries(guestStats)
                 .sort((a, b) => b[1].totalCount - a[1].totalCount)
                 .slice(0, 12); 
@@ -262,7 +332,7 @@
                 <button onclick="addCardPlayer('${name}')" class="guest-btn bg-white border border-purple-200 text-purple-700 px-3 py-1 rounded-lg text-xs font-medium shadow-sm hover:bg-purple-50">
                     ${name}
                 </button>
-            `).join('') || '<span class="text-[10px] text-gray-300">勾選「已付費」後，客人將出現在此</span>';
+            `).join('') || '<span class="text-[10px] text-gray-300">目前無熟客資料</span>';
 
             // 2. 一般區
             document.getElementById('generalList').innerHTML = data.general.map(g => `
